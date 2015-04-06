@@ -1,0 +1,123 @@
+<!--
+
+/*
+ *
+ * Copyright 2013-2014 Google Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+-->
+
+<html>
+<head>
+  <title>RedTwit</title>
+  <script type="text/javascript">
+  (function() {
+    var po = document.createElement('script');
+    po.type = 'text/javascript'; po.async = true;
+    po.src = 'https://plus.google.com/js/client:plusone.js';
+    var s = document.getElementsByTagName('script')[0];
+    s.parentNode.insertBefore(po, s);
+  })();
+  </script>
+  <!-- JavaScript specific to this application that is not related to API
+     calls -->
+  <script src="//ajax.googleapis.com/ajax/libs/jquery/1.8.2/jquery.min.js" ></script>
+</head>
+<body>
+  <div id="cacheSet">
+      Create or login:
+      User <input type="text" id="username"> password <input type="text" id="password">
+      <button type ="button" onclick="createUser()">Create</button> 
+      <button type="button" onclick="loginUser()">Login</button>
+      <div id="loadingState"></div>
+
+      <button type="button" onclick="test()">Test!</button>
+      <div id="testOutput"></div>
+
+
+      <button type="button" onclick="logout()">Logout!</button>
+
+      Public Posts:
+      <button type="button" onclick="publicTimeline()">Refresh</button>
+      <div id="publicPosts"></div>
+
+      News Feed:
+      <button type="button" onclick="getFeed()">Refresh</button>
+      <div id="feed"></div>
+
+
+      <input type="text" id="target"><button type="button" onclick="follow()">Follow</button>
+
+
+      <input type="text" id="post"><button type="button" onclick="post()">Post</button>
+  </div>
+</body>
+<script type="text/javascript">
+    function createUser()
+    {
+        $("#loadingState").html("Creating...");
+        $.post("/twit/createUser",{ username: $("#username").val(), password: $("#password").val() })
+        .done(function (msg) {
+            $("#loadingState").html(msg);
+        });
+    }
+    function loginUser() {
+        $("#loadingState").html("Authenticating...");
+        $.post("/twit/loginUser", { username: $("#username").val(), password: $("#password").val() })
+        .done(function (msg) {
+            $("#loadingState").html(msg);
+        });
+    }
+    function post() {
+        $.post("/twit/post", { post: $("#post").val() })
+        .done(function (msg) {
+            $("#loadingState").html(msg);
+        });
+    }
+    function publicTimeline() {
+        $.get("/twit/getPublicPosts")
+        .done(function (msg) {
+            $("#publicPosts").html(msg);
+        });
+    }
+    function follow() {
+        $.post("/twit/follow", { target: $("#target").val() })
+        .done(function (msg) {
+            $("#loadingState").html(msg);
+        });
+    }
+    function getFeed() {
+        $.get("/twit/getFeed")
+        .done(function (msg) {
+            $("#feed").html(msg);
+        });
+    }
+    function test()
+    {
+        $("#testOutput").html("Calling Test Endpoint...");
+        $.get("/twit/test")
+        .done(function (msg) {
+            $("#testOutput").html(msg);
+        });
+    }
+    function logout()
+    {
+        $.get("/twit/logout")
+        .done(function (msg) {
+            $("#loadingState").html(msg);
+        });
+    }
+</script>
+</html>
