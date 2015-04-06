@@ -8,6 +8,9 @@ using System.Web;
 
 namespace GPlusQuickstartCsharp
 {
+    /// <summary>
+    /// Test
+    /// </summary>
     public class UserProvider
     {
         private const string UniqueIdKey = "uniqueIdKey";
