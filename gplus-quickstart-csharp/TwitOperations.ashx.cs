@@ -1,10 +1,14 @@
-﻿using RedisBoost;
+﻿using BusinessLogic;
+using Models;
+using RedisBoost;
 using StackExchange.Redis;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading;
+using System.Threading.Tasks;
 using System.Web;
 using System.Web.Compilation;
 using System.Web.Routing;
@@ -91,9 +95,58 @@ namespace GPlusQuickstartCsharp
                 else
                 {
                     // See if the user is available
-                    var postId = await userProvider.Post(
-                        (long)sessionState["UserId"],
-                        context.Request.Form["post"]);
+                    var postId = await userProvider.Post(new Post((long)sessionState["UserId"], context.Request.Form["post"], "Text"));
+
+                    context.Response.Write(string.Format("New post with id {0} created", postId));
+                }
+            }
+            else if (context.Request.Path.Contains("youtube"))
+            {
+                UserProvider userProvider = new UserProvider();
+
+                context.Response.ContentType = "text/plain";
+                HttpSessionState sessionState = context.Session;
+                if (context.Session == null || sessionState["UserId"] == null)
+                {
+                    context.Response.Write("No user logged in on this browser");
+                }
+                else
+                {
+                    // Get the youtube URI
+                    string youtubeUri = context.Request.Form["youtubeUri"];
+                    Regex youtubeRegex = new Regex("v=(.*)");
+
+                    var matches = youtubeRegex.Match(youtubeUri);
+
+                    // Create the post
+                    Post post = new Post((long)sessionState["UserId"], matches.Groups[1].ToString(), "Youtube");
+
+                    // See if the user is available
+                    var postId = await userProvider.Post(post);
+
+                    context.Response.Write(string.Format("New post with id {0} created", postId));
+                }
+            }
+            else if (context.Request.Path.Contains("link"))
+            {
+                UserProvider userProvider = new UserProvider();
+
+                context.Response.ContentType = "text/plain";
+                HttpSessionState sessionState = context.Session;
+                if (context.Session == null || sessionState["UserId"] == null)
+                {
+                    context.Response.Write("No user logged in on this browser");
+                }
+                else
+                {
+                    // Get the URI
+                    string uri = context.Request.Form["uri"];
+
+                    // Create a post
+                    Post post = new Post((long)sessionState["UserId"], uri, "Link");
+
+                    // Create a post
+                    var postId = await userProvider.Post(post);
 
                     context.Response.Write(string.Format("New post with id {0} created", postId));
                 }
@@ -141,12 +194,7 @@ namespace GPlusQuickstartCsharp
                     var posts = await userProvider.GetPostsFromFollows(
                         (long)sessionState["UserId"]);
 
-                    StringBuilder postResponse = new StringBuilder();
-
-                    foreach (Post post in posts)
-                    {
-                        postResponse.AppendFormat("{0} says: {1}<br>", post.PosterName, post.PostBody);
-                    }
+                    StringBuilder postResponse = BuildPostResponse(posts).Result;
 
                     context.Response.Write(postResponse.ToString());
                 }
@@ -160,12 +208,7 @@ namespace GPlusQuickstartCsharp
                 // See if the user is available
                 var posts = await userProvider.GetPublicTimeline();
 
-                StringBuilder postResponse = new StringBuilder();
-
-                foreach (Post post in posts)
-                {
-                    postResponse.AppendFormat("{0} says: {1}<br>", post.PosterName, post.PostBody);
-                }
+                StringBuilder postResponse = BuildPostResponse(posts).Result;
 
                 context.Response.Write(postResponse.ToString());
             }
@@ -200,6 +243,45 @@ namespace GPlusQuickstartCsharp
 
                 context.Response.Write("Done");
             }
+        }
+
+        private static async Task<StringBuilder> BuildPostResponse(Post[] posts)
+        {
+            UserProvider userProvider = new UserProvider();
+            StringBuilder postResponse = new StringBuilder();
+            Dictionary<long, string> userNames = new Dictionary<long, string>();
+            foreach (Post post in posts)
+            {
+                try
+                {
+                    string postOwner;
+                    if (!userNames.TryGetValue(post.PostOwnerId, out postOwner))
+                    {
+                        postOwner = await userProvider.GetUsername(post.PostOwnerId);
+                        userNames[post.PostOwnerId] = postOwner;
+                    }
+
+                    string postBody = post.PostBody;
+                    switch (post.PostType)
+                    {
+                        case "Link":
+                            // Parse the link
+                            Link link = await LinkParser.ParseLink(post.PostBody);
+                            if (link != null)
+                            {
+                                postBody = link.ClientString;
+                            }
+                            break;
+                    }
+                    postResponse.AppendFormat("{0} says: {1}<br>", postOwner, postBody);
+                }
+                catch (Exception e)
+                {
+
+                }
+            }
+
+            return postResponse;
         }
 
         public bool IsReusable

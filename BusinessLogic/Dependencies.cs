@@ -1,4 +1,5 @@
-﻿using StackExchange.Redis;
+﻿using Models;
+using StackExchange.Redis;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -6,7 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Web;
 
-namespace GPlusQuickstartCsharp
+namespace BusinessLogic
 {
     public class Dependencies
     {
@@ -19,6 +20,15 @@ namespace GPlusQuickstartCsharp
         public IDatabase GetRedisDatabase()
         {
             return redisMultiplexer.Value.GetDatabase();
+        }
+
+        private Lazy<ILinkCache> linkCache = new Lazy<ILinkCache>(() =>
+            {
+                return new LinkCache();
+            }, LazyThreadSafetyMode.ExecutionAndPublication);
+        public ILinkCache GetLinkCache()
+        {
+            return linkCache.Value;
         }
 
         public async Task ClearStore()

@@ -1,4 +1,6 @@
-﻿using StackExchange.Redis;
+﻿using Models;
+using ProtoBuf;
+using StackExchange.Redis;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -6,7 +8,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using System.Web;
 
-namespace GPlusQuickstartCsharp
+namespace BusinessLogic
 {
     /// <summary>
     /// Test
@@ -23,9 +25,6 @@ namespace GPlusQuickstartCsharp
         private const string PostsIndexFormat = "posts:{0}";
 
         private const string PostIndexFormat = "post:{0}";
-        private const string PostTimeField = "time";
-        private const string PostBodyField = "body";
-        private const string OwnerField = "owner";
 
         private const string PublicTimelineKey = "publicTimeline";
 
@@ -113,31 +112,30 @@ namespace GPlusQuickstartCsharp
             return success;
         }
 
-        public async Task<long> Post(long posterId, string postBody)
+        public async Task<long> Post(Post post)
         {
             var redisDb = Dependencies.Instance.Value.GetRedisDatabase();
 
             var postId = await GetNewPostId();
 
-            // Post time
-            var postTime = DateTime.UtcNow.Ticks;
+            // Serialize the post
+            var serializedPost = SerializationUtils.Serialize(post);
 
             // Add the post indexed by Id
-            await redisDb.HashSetAsync(string.Format(PostIndexFormat, postId), new HashEntry[] {
-                new HashEntry(PostTimeField, postTime),
-                new HashEntry(PostBodyField, postBody),
-                new HashEntry(OwnerField, posterId)
-            });
-                
+            await redisDb.StringSetAsync(string.Format(PostIndexFormat, postId), serializedPost);
+
+            var postTicks = post.PostTime.Ticks;
+
             // Add the post ID to the owners post list
-            await redisDb.SortedSetAddAsync(string.Format(PostsIndexFormat, posterId), new SortedSetEntry[] {
-                new SortedSetEntry(postId, postTime)
+            await redisDb.SortedSetAddAsync(string.Format(PostsIndexFormat, post.PostOwnerId), new SortedSetEntry[] {
+                new SortedSetEntry(postId, postTicks)
             });
 
             // Add the post ID to the public timeline
             await redisDb.SortedSetAddAsync(PublicTimelineKey, new SortedSetEntry[] {
-                new SortedSetEntry(postId, postTime)
+                new SortedSetEntry(postId, postTicks)
             });
+
             return postId;
         }
 
@@ -164,7 +162,8 @@ namespace GPlusQuickstartCsharp
 
             await Task.WhenAll(postFetchTasks);
 
-            return posts.ToArray();
+            // Sort by descending
+            return posts.OrderByDescending(post => post.PostTime).ToArray();
         }
 
         public async Task<Post[]> GetUserPosts(RedisValue user)
@@ -194,16 +193,20 @@ namespace GPlusQuickstartCsharp
             List<Task> getPostTasks = new List<Task>(postIds.Length);
             foreach (long postId in postIds)
             {
-                getPostTasks.Add(redisDb.HashGetAllAsync(string.Format(PostIndexFormat, postId)).ContinueWith(postValue =>
+                getPostTasks.Add(redisDb.StringGetAsync(string.Format(PostIndexFormat, postId)).ContinueWith(postValueTask =>
                 {
-                    var entries = postValue.Result;
-                    var userNameTask = GetUsername((long)entries.First(hashEntry => hashEntry.Name == OwnerField).Value);
-                    var postBody = entries.First(hashEntry => hashEntry.Name == PostBodyField).Value;
-                    posts.Add(new Post(userNameTask.Result, postBody));
+                    byte[] serializedPost = (byte[])postValueTask.Result;
+                    var deserializedPost = SerializationUtils.Deserialize<Post>(serializedPost);
+                    if (deserializedPost != null)
+                    {
+                        posts.Add(deserializedPost);
+                    }
                 }));
             }
             await Task.WhenAll(getPostTasks.ToArray());
-            return posts.ToArray();
+
+            // Sort by descending
+            return posts.OrderByDescending(post => post.PostTime).ToArray();
         }
 
         public async Task<long> Login(string username, string password)
